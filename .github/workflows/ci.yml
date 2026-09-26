@@ -1,0 +1,39 @@
+name: Web checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-web.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: python -m pip install -r requirements-web.txt
+      - run: python -m unittest -v test_ncm tests.test_web
+      - run: node --check web/app.js
+      - name: Build production image
+        run: docker build -t songdown:test .
+      - name: Exercise production container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name songdown-ci --read-only --tmpfs /tmp:size=256m --tmpfs /data:uid=10001,gid=10001 --cap-drop=ALL --security-opt no-new-privileges --memory=512m -e WEB_ACCESS_TOKEN=ci-only-not-a-real-secret-123456789 -e WEB_SECRET_KEY=ci-only-session-key-not-a-real-secret-123456789 -e WEB_COOKIE_SECURE=0 -p 127.0.0.1:8765:8765 songdown:test
+          trap 'docker logs songdown-ci; docker rm -f songdown-ci' EXIT
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8765/api/health; then break; fi
+            sleep 1
+          done
+          python scripts/smoke_http.py --base-url http://127.0.0.1:8765 --token ci-only-not-a-real-secret-123456789
+      - name: Check Caddy configuration
+        run: docker run --rm -e SITE_DOMAIN=music.example.com -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile

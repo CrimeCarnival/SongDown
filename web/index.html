@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="SongDown 音频格式转换工作台，批量转换 NCM、OGG，保留你的音乐。">
+<meta name="theme-color" content="#202b29"><title>SongDown · 音频转换工作台</title>
+<link rel="icon" href="/assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/style.css">
+<script src="/assets/app.js" defer></script>
+</head>
+<body>
+<aside class="sidebar">
+<a class="brand" href="/" aria-label="SongDown 首页"><span class="brand-icon">♫</span> SongDown<span class="brand-dot">.</span></a>
+<div class="workspace-label">你的音乐工作台</div>
+<nav><a class="nav-item active" href="#workspace"><span>↔</span> 格式转换 <span class="nav-count">01</span></a><a class="nav-item" href="#guide"><span>▤</span> 使用说明</a></nav>
+<div class="side-art" aria-hidden="true"><div class="record"><div class="record-label">SD<br><small>KEEP THE MUSIC</small></div></div></div>
+<div class="side-note"><span class="tiny-line"></span><p>让音乐<br>自由播放。</p><small>YOUR MUSIC, YOUR WAY.</small></div>
+<div class="side-footer"><span class="status-dot"></span><span id="mode-label">正在连接服务</span><button id="logout" class="text-button light" hidden>退出</button></div>
+</aside>
+<main id="workspace">
+<header class="topbar"><span>工作台 <span class="breadcrumb">/ 音频转换</span></span><button id="refresh-env" class="text-button">↻ 检查环境</button></header>
+<section class="intro"><div><div class="eyebrow">A LITTLE LESS FORMAT. A LOT MORE MUSIC.</div><h1>换个格式，<span>继续听。</span></h1><p>把收藏的音乐转换为通用格式。批量处理，一次完成。</p></div><div class="intro-mark" aria-hidden="true">♪</div></section>
+<div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+<section id="login-panel" class="panel login-panel" hidden><div class="section-heading"><span class="step">↗</span><h2>访问工作台</h2></div><p>此服务需要访问口令。上传的文件仅在当前浏览器会话中可见。</p><form id="login-form"><label for="access-token">访问口令</label><div class="login-row"><input id="access-token" type="password" autocomplete="current-password" required><button class="primary" type="submit">进入工作台 →</button></div></form></section>
+<div id="workbench" hidden>
+<div class="workspace-grid">
+<section class="panel upload-panel"><div class="section-heading"><span class="step">01</span><h2>添加音乐</h2><span id="file-count" class="pill">0 个文件</span></div>
+<div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="选择或拖放音频文件"><div class="upload-symbol" aria-hidden="true">↥</div><h3>把音乐拖到这里</h3><p>或从电脑中选择文件，支持批量添加</p><div class="upload-actions"><button id="pick-files" class="primary" type="button">＋ 选择文件</button><button id="pick-folder" class="secondary" type="button">选择文件夹</button></div><small id="upload-limits">每批最多 100 个文件 · 200 MB</small></div>
+<input id="file-input" type="file" accept=".ncm,.ogg,.lrc,.mgg,.mflac" multiple hidden><input id="folder-input" type="file" webkitdirectory multiple hidden>
+<div class="queue-heading"><span>待转换文件 <span id="total-size">0 B</span></span><button id="clear-files" class="text-button" disabled>清空列表</button></div>
+<div id="file-list" class="file-list"><div class="empty-state"><span>♫</span><p>还没有添加音乐</p><small>支持的格式会根据当前服务环境自动显示</small></div></div>
+</section>
+<aside class="settings-column"><section class="panel settings-panel"><div class="section-heading"><span class="step">02</span><h2>转换设置</h2></div><p class="section-description">按文件格式自动处理</p><div id="task-options" class="task-options"></div><div class="quality-note"><span>◎</span><p><strong>保留每一份原始音质</strong><br>NCM 直接提取 MP3 或 FLAC，不二次压缩。OGG 转换为高质量 MP3。</p></div><button id="start" class="primary full-width" disabled>开始转换 <span>→</span></button><button id="cancel" class="secondary full-width" hidden>取消任务</button><p class="privacy-note">文件临时保存 1 小时，也可随时删除结果。<br>请仅处理你有权使用的音频。</p></section><section class="qq-note" id="qq-note"><span>↗</span><div><strong>QQ 音乐格式</strong><p id="qq-description">MGG、MFLAC 需在本机 QQ 模式下使用，公网模式不读取 QQ 账号。</p><button id="update-cookie" class="text-button" hidden>更新 Cookie →</button></div></section></aside>
+</div>
+<section id="result-panel" class="panel result-panel" hidden><div class="section-heading"><span class="step">03</span><h2 id="result-title">正在转换</h2><span id="job-status" class="pill">等待中</span><button id="delete-job" class="text-button" disabled>删除任务与文件</button></div><div class="progress-summary"><span id="progress-text">正在准备</span><span id="stats-text"></span></div><progress id="progress" max="100" value="0">0%</progress><div id="result-files"></div><a id="download-all" class="primary download-all" hidden>↓ 打包下载 ZIP</a><details class="logs"><summary>处理日志</summary><pre id="log-text"></pre></details></section>
+</div>
+<section id="guide" class="guide"><div class="guide-heading"><h2>从文件，到音乐。</h2><span>简单三步，找回熟悉的旋律</span></div><div class="guide-grid"><article><span>01 / 添加</span><p>选择文件或整个文件夹，<br>原有目录结构会被保留。</p></article><article><span>02 / 转换</span><p>确认可用格式，点击开始。<br>过程中可查看日志或取消。</p></article><article><span>03 / 下载</span><p>试听转换后的音乐，<br>单独下载或一次打包带走。</p></article></div><p class="format-footnote">NCM 容器中独立存储的封面与歌曲标签暂不写入输出文件。QQ 格式能否解密取决于文件版本、客户端及有效密钥。</p></section>
+<footer class="footer"><span>SongDown <span class="muted">/ 为你的音乐留一条路。</span></span><span>自托管 · 无外部字体与脚本</span></footer>
+</main>
+</body></html>

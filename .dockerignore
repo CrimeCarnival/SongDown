@@ -1,0 +1,10 @@
+**
+!Dockerfile
+!requirements-web.txt
+!audio_converter_core.py
+!ncm_decoder.py
+!web_app.py
+!web_worker.py
+!run_web.py
+!web/
+!web/**

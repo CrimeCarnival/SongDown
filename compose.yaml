@@ -1,0 +1,47 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    image: songdown:local
+    restart: unless-stopped
+    init: true
+    environment:
+      WEB_ACCESS_TOKEN: ${WEB_ACCESS_TOKEN:?Run python scripts/init_deploy.py first}
+      WEB_SECRET_KEY: ${WEB_SECRET_KEY:?Run python scripts/init_deploy.py first}
+      WEB_COOKIE_SECURE: "1"
+      WEB_DATA_DIR: /data
+    volumes:
+      - jobs:/data
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    stop_grace_period: 30s
+    expose:
+      - "8765"
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?Set your domain in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    mem_limit: 128m
+volumes:
+  jobs:
+  caddy_data:
+  caddy_config:
