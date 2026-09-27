@@ -9,6 +9,7 @@ WORKDIR /app
 COPY requirements-web.txt ./
 RUN python -m pip install --no-cache-dir -r requirements-web.txt
 COPY audio_converter_core.py ncm_decoder.py web_app.py web_worker.py conversion_errors.py site_settings.py run_web.py ./
+COPY downloads.json ./
 COPY web/ ./web/
 USER 10001:10001
 EXPOSE 8765

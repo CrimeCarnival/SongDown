@@ -81,7 +81,13 @@ def main():
         expect(page.locator('#start')).to_be_disabled()
         expect(page.locator('#mode-label')).to_have_text('完整功能版')
         expect(page.locator('#update-cookie')).to_have_count(0)
-        expect(page.locator('#component-status')).to_contain_text('无需下载')
+        downloads = context.request.get(args.base_url + '/api/downloads').json()
+        if downloads['available']:
+            expect(page.locator('#component-link')).to_be_visible()
+            expect(page.locator('#component-link')).to_have_attribute('href', downloads['url'])
+            expect(page.locator('#component-status')).to_contain_text(downloads['extraction_code'])
+        else:
+            expect(page.locator('#component-status')).to_contain_text('无需下载')
         page.locator('#file-input').set_input_files([
             {'name':'broken.ncm','mimeType':'application/octet-stream','buffer':b'CTENFDAMbroken'},
             {'name':'good.lrc','mimeType':'text/plain','buffer':b'[00:01]lyrics'}])

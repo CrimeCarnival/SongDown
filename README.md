@@ -40,7 +40,9 @@ FFmpeg 需在 PATH，或 Windows 下置于 `input/Tools/ff.exe`。详细权限�
 
 ## 网盘下载区
 
-复制 `downloads.example.json` 为 `downloads.json`，填写 HTTPS 网盘链接、提取码和组件 ZIP 的 SHA256。也可用 `SONGDOWN_DOWNLOAD_CONFIG` 指向配置文件。字段仅用于公开展示，不要写账号凭据。
+已配置 [百度网盘组件下载](https://pan.baidu.com/s/1DjDlKvH9BGyXRa5sx54Hxw?pwd=hvke)，提取码 `hvke`。校验值对应已交付的 184 MB 组件 ZIP。
+
+更换链接时，复制 `downloads.example.json` 为 `downloads.json`，填写 HTTPS 网盘链接、提取码和组件 ZIP 的 SHA256。也可用 `SONGDOWN_DOWNLOAD_CONFIG` 指向配置文件。字段仅用于公开展示，不要写账号凭据。
 
 ```powershell
 python scripts/configure_downloads.py --url "https://你的网盘分享链接" --code "提取码" --archive "组件包.zip"

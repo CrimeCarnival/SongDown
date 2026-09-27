@@ -13,7 +13,7 @@ FILES = [
     'README.md', 'VERIFICATION.md', 'THIRD_PARTY.md',
     'requirements.txt', 'requirements-web.txt', 'requirements-test.txt',
     'audio_converter_core.py', 'ncm_decoder.py', 'web_app.py', 'web_worker.py',
-    'conversion_errors.py', 'site_settings.py', 'downloads.example.json', 'run_web.py', 'start_web.bat', 'start_local_qq.bat', 'convert_ncm.py', 'test_ncm.py',
+    'conversion_errors.py', 'site_settings.py', 'downloads.example.json', 'downloads.json', 'run_web.py', 'start_web.bat', 'start_local_qq.bat', 'convert_ncm.py', 'test_ncm.py',
     'GUI/app.py', 'start_gui.bat', 'main.py', 'convert_mgg_to_mp3.py',
     'convert_ogg_to_mp3.py', 'update_cookie.py', 'hook_qq_music.js',
     'web/qq-guide.html', 'deploy/LOCAL_QQ.md', 'web/index.html', 'web/style.css', 'web/app.js', 'web/icon.svg',
