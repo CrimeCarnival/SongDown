@@ -44,10 +44,10 @@ def safe_relative(raw: str) -> Path:
     return Path(*parts)
 
 
-def capabilities(local_qq=False):
+def capabilities():
     ffmpeg = bool(find_ffmpeg())
     ncm = importlib.util.find_spec("Crypto") is not None
-    qq = local_qq and os.name == "nt"
+    qq = os.name == "nt"
     process_running = False
     frida_ok = importlib.util.find_spec("frida") is not None
     if qq and frida_ok:
@@ -59,12 +59,11 @@ def capabilities(local_qq=False):
             pass
     qmdec = QMDEC_SRC.is_dir() or importlib.util.find_spec("qmdec") is not None
     return {
-        "ncm": {"available": ncm, "label": "NCM → MP3 / FLAC", "detail": "保留原始音质" if ncm else "请安装 pycryptodome"},
+        "ncm": {"available": ncm, "label": "NCM → MP3 / FLAC", "detail": "保留原始音质" if ncm else "服务器正在准备 NCM 转换组件"},
         "ogg": {"available": ffmpeg, "label": "OGG → MP3", "detail": "高质量 MP3" if ffmpeg else "服务器未安装 FFmpeg"},
         "lrc": {"available": True, "label": "复制 LRC 歌词", "detail": "保留歌词与目录结构"},
-        "mgg": {"available": qq and qmdec and ffmpeg, "label": "MGG → MP3", "detail": "需要有效 QQ Cookie 或密钥缓存" if qq else "需使用本机 QQ 模式"},
-        "mflac": {"available": qq and process_running and ffmpeg and HOOK_SCRIPT.is_file(), "label": "MFLAC → FLAC", "detail": "依赖本机 QQ 客户端版本" if qq and process_running else "需本机 QQ 模式并启动 QQ 音乐"},
-        "cookie": {"available": qq and process_running and qmdec, "label": "更新 QQ Cookie", "detail": "仅本机 QQ 模式可用"},
+        "mgg": {"available": qmdec and ffmpeg, "label": "MGG → MP3", "detail": "由服务器取得文件解密密钥" if qmdec and ffmpeg else "服务器正在准备 QQ 转换组件"},
+        "mflac": {"available": qq and process_running and ffmpeg and HOOK_SCRIPT.is_file(), "label": "MFLAC → FLAC", "detail": "由服务器完成 QQ 音乐解密" if qq and process_running else "服务器 QQ 音乐尚未就绪"},
     }
 
 
@@ -80,6 +79,7 @@ class Job:
     stats: dict = field(default_factory=lambda: dict(total=0, success=0, skipped=0, failed=0))
     logs: list[str] = field(default_factory=list)
     outputs: list[dict] = field(default_factory=list)
+    file_results: list[dict] = field(default_factory=list)
     cancel: threading.Event = field(default_factory=threading.Event)
     process: subprocess.Popen | None = None
     lock: threading.RLock = field(default_factory=threading.RLock)
@@ -87,7 +87,7 @@ class Job:
     def snapshot(self):
         with self.lock:
             return dict(id=self.id, status=self.status, stats=dict(self.stats),
-                        logs=list(self.logs), outputs=list(self.outputs), files=self.files,
+                        logs=list(self.logs), outputs=list(self.outputs), files=self.files, file_results=list(self.file_results),
                         created=self.created, finished=self.finished)
 
     def log(self, message):
@@ -193,8 +193,15 @@ class JobManager:
                                 received_done.set()
                         elif kind == "log":
                             job.log(value)
+                        elif kind == "file_result":
+                            with job.lock:
+                                job.file_results.append(value)
+                        elif kind == "diagnostic":
+                            import logging
+                            logging.warning("Job %s: %s", job.id, value)
                     except (ValueError, KeyError, TypeError):
-                        job.log(line.strip())
+                        import logging
+                        logging.warning("Worker diagnostic for %s: %s", job.id, line.strip())
 
             reader = threading.Thread(target=read_events, daemon=True)
             reader.start()
@@ -243,9 +250,13 @@ class JobManager:
             if process is not None and process.poll() is None:
                 self.stop_process(process)
             with job.lock:
+                if job.status == "failed" and not any(r.get("status") == "failed" for r in job.file_results):
+                    job.file_results.append(dict(name="整个任务", status="failed", code="SERVICE_TASK_FAILED",
+                        reason=job.logs[-1] if job.logs else "服务处理任务失败", action="请缩小文件批次后重试，或联系站长。"))
                 job.finished = time.time()
                 job.process = None
             shutil.rmtree(job.root / "input", ignore_errors=True)
+            shutil.rmtree(job.root / "work", ignore_errors=True)
             if job.status in {"cancelled", "failed"}:
                 shutil.rmtree(job.root / "output", ignore_errors=True)
 
@@ -255,7 +266,7 @@ def create_app(config=None):
     app.config.update(
         SECRET_KEY=os.environ.get("WEB_SECRET_KEY") or secrets.token_hex(32),
         ACCESS_TOKEN=os.environ.get("WEB_ACCESS_TOKEN", ""),
-        LOCAL_QQ=False,
+
         DATA_DIR=os.environ.get("WEB_DATA_DIR", str(PROJECT_ROOT / ".web-data")),
         MAX_CONTENT_LENGTH=200 * 1024 * 1024,
         MAX_FORM_MEMORY_SIZE=512 * 1024,
@@ -273,9 +284,6 @@ def create_app(config=None):
 
     @app.before_request
     def guard():
-        if app.config["LOCAL_QQ"]:
-            if request.remote_addr not in {"127.0.0.1", "::1"} or request.host.split(":")[0] not in {"127.0.0.1", "localhost"}:
-                abort(403, "本机 QQ 模式仅允许本机访问")
         if request.method in {"POST", "DELETE", "PUT", "PATCH"}:
             if request.headers.get("X-Requested-With") != "AudioWorkbench":
                 abort(403, "无效的请求来源，请通过网页操作")
@@ -326,8 +334,7 @@ def create_app(config=None):
 
     @app.get("/api/capabilities")
     def environment():
-        return jsonify(tasks=capabilities(app.config["LOCAL_QQ"]),
-                       mode="local" if app.config["LOCAL_QQ"] else "public",
+        return jsonify(tasks=capabilities(),
                        limits=dict(bytes=app.config["MAX_CONTENT_LENGTH"], files=100, ttl=app.config["JOB_TTL"]))
 
     def owned(job_id):
@@ -361,9 +368,6 @@ def create_app(config=None):
                 abort(400, "任务选项无效")
             if not isinstance(tasks, list) or not tasks or any(not isinstance(x, str) or x not in TASKS for x in tasks):
                 abort(400, "请选择有效的转换任务")
-            caps = capabilities(app.config["LOCAL_QQ"])
-            if any(not caps[t]["available"] for t in tasks):
-                abort(400, "所选任务在当前环境不可用，请刷新环境状态")
             paths, seen, output_keys = [], set(), set()
             for upload in uploads:
                 try:
@@ -444,19 +448,11 @@ def create_app(config=None):
 
     @app.post("/api/cookie")
     def cookie():
-        if not app.config["LOCAL_QQ"] or not capabilities(True)["cookie"]["available"]:
-            abort(403, "更新 Cookie 仅限本机 QQ 模式，且必须启动 QQ 音乐")
-        with manager.lock:
-            if any(not j.finished for j in manager.jobs.values()):
-                abort(409, "请等待转换任务完成")
-        from update_cookie import update_cookie
-        try:
-            result = update_cookie()
-        except Exception:
-            abort(503, "更新失败，请确认 QQ 音乐已登录且权限足够")
-        if not result.get("ok"):
-            abort(503, "无法提取 Cookie，请检查 QQ 音乐登录状态和客户端版本")
-        # Never return a Cookie, account identifier or credential length to the browser.
-        return jsonify(ok=True, message="Cookie 已更新")
+        abort(404, "网站不提供账号凭据操作，请由站长在服务端维护。")
+
+    @app.get("/api/downloads")
+    def downloads():
+        from site_settings import public_downloads
+        return jsonify(public_downloads())
 
     return app

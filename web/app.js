@@ -22,15 +22,14 @@ function updateControls() {
   $('pick-files').disabled=state.busy;$('pick-folder').disabled=state.busy;
   $('file-input').disabled=state.busy;$('folder-input').disabled=state.busy;
   document.querySelectorAll('.remove-file').forEach(b=>b.disabled=state.busy);
-  document.querySelectorAll('.task-option input').forEach(b=>b.disabled=state.busy||!state.caps[b.value]?.available);
+  document.querySelectorAll('.task-option input').forEach(b=>b.disabled=state.busy);
   $('cancel').hidden=!state.busy;$('cancel').disabled=!state.job;
-  $('update-cookie').disabled=state.busy;
 }
 function renderFiles() {
   $('file-count').textContent=`${state.files.length} 个文件`;
   $('total-size').textContent=size(state.files.reduce((n,f)=>n+f.size,0));
   const list=$('file-list');list.replaceChildren();
-  if(!state.files.length){const empty=document.createElement('div');empty.className='empty-state';empty.innerHTML='<span>♫</span><p>还没有添加音乐</p><small>支持的格式会根据当前服务环境自动显示</small>';list.append(empty);}
+  if(!state.files.length){const empty=document.createElement('div');empty.className='empty-state';empty.innerHTML='<span>♫</span><p>还没有添加音乐</p><small>支持 NCM、OGG、MGG、MFLAC 和 LRC</small>';list.append(empty);}
   state.files.forEach((file,index)=>{
     const row=document.createElement('div');row.className='file-row';
     const icon=document.createElement('div');icon.className='file-icon';icon.textContent=extension(file).toUpperCase();
@@ -46,7 +45,7 @@ function addFiles(files) {
   const messages=[];let total=state.files.reduce((n,f)=>n+f.size,0);
   for(const file of files){
     const ext=extension(file);
-    if(!state.caps[ext]?.available){messages.push(`${file.name}：格式不支持或当前环境不可用`);continue;}
+    if(!state.caps[ext]){messages.push(`${file.name}：不支持此文件格式`);continue;}
     if(!file.size){messages.push(`${file.name}：文件为空`);continue;}
     if(state.files.some(f=>nameOf(f).toLowerCase()===nameOf(file).toLowerCase())){messages.push(`${file.name}：已在列表中`);continue;}
     if(state.files.length>=state.limits.files||total+file.size>state.limits.bytes-65536){messages.push('已达到单批数量或大小限制，请分批转换');break;}
@@ -57,20 +56,18 @@ function addFiles(files) {
 }
 async function loadEnvironment() {
   const data=await api('/api/capabilities');state.caps=data.tasks;state.limits=data.limits;
-  $('mode-label').textContent=data.mode==='local'?'本机 QQ 模式':'通用转换模式';
+  $('mode-label').textContent='完整功能版';
   $('upload-limits').textContent=`每批最多 ${data.limits.files} 个文件 · ${size(data.limits.bytes)}`;
   const previous=tasks();const root=$('task-options');root.replaceChildren();
   for(const key of ["ncm","ogg","lrc","mgg","mflac"]){
     const task=data.tasks[key];
     if(key==='cookie')continue;
-    const label=document.createElement('label');label.className=`task-option${task.available?'':' unavailable'}`;
-    const input=document.createElement('input');input.type='checkbox';input.value=key;input.disabled=!task.available;
-    input.checked=task.available&&(previous.length?previous.includes(key):['ncm','ogg','lrc'].includes(key));input.onchange=updateControls;
+    const label=document.createElement('label');label.className='task-option';
+    const input=document.createElement('input');input.type='checkbox';input.value=key;input.disabled=false;
+    input.checked=previous.length?previous.includes(key):true;input.onchange=updateControls;
     const text=document.createElement('span');const title=document.createElement('strong');title.textContent=task.label;
-    const detail=document.createElement('small');detail.textContent=task.detail;text.append(title,detail);label.append(input,text);root.append(label);
+    const detail=document.createElement('small');detail.textContent=task.available?task.detail:'服务端尚未就绪，转换时会说明原因';text.append(title,detail);label.append(input,text);root.append(label);
   }
-  $('update-cookie').hidden=!data.tasks.cookie.available;
-  if(data.mode==='local')$('qq-description').textContent='在本机 QQ 音乐中登录后更新 Cookie。解密能力取决于客户端、文件版本和有效密钥。';
   updateControls();
 }
 function renderJob(job) {
@@ -83,14 +80,11 @@ function renderJob(job) {
   $('progress-text').textContent=done?`${statusNames[job.status]} · 已处理 ${processed} / ${stats.total} 个文件`:`${statusNames[job.status]} · ${processed} / ${stats.total}`;
   $('stats-text').textContent=`成功 ${stats.success} · 跳过 ${stats.skipped} · 失败 ${stats.failed}`;
   $('log-text').textContent=job.logs.join('\n');
-  if(job.logs.some(line=>/进程访问权限不足|unable to access process/i.test(line))){
-    notice('QQ 音乐已启动，但服务无权访问进程。请停止旧服务，以管理员身份运行 start_local_qq.bat，再重新上传。操作步骤见右侧“本机 QQ 模式教程”。','error');
-    document.querySelector('.logs').open=true;
-  }
   $('delete-job').disabled=!done;
-  const signature=JSON.stringify(job.outputs);
+  const signature=JSON.stringify([job.outputs,job.file_results]);
   if(done&&signature!==state.rendered){
     state.rendered=signature;const root=$('result-files');root.replaceChildren();
+    for(const failure of (job.file_results||[]).filter(f=>f.status==='failed')){const row=document.createElement('div');row.className='failure-card';const title=document.createElement('strong');title.textContent=failure.name||'转换任务';const reason=document.createElement('p');reason.textContent=failure.reason;const action=document.createElement('small');action.textContent=`${failure.action}（${failure.code}）`;row.append(title,reason,action);root.append(row);}
     for(const output of job.outputs){
       const row=document.createElement('div');row.className='result-row';
       const meta=document.createElement('div');meta.className='file-meta';const name=document.createElement('strong');name.textContent=output.name;
@@ -126,10 +120,18 @@ async function start() {
     sessionStorage.setItem('songdown-job',job.id);$('start').textContent='正在转换…';renderJob(job);poll();
   } catch(error){state.busy=false;notice(error.message,'error');$('start').innerHTML='开始转换 <span>→</span>';updateControls();}
 }
+async function loadDownloads(){
+  const data=await api('/api/downloads');
+  $('component-title').textContent=data.title;
+  $('component-info').textContent=`QQ 音乐 ${data.qq_version} · Frida ${data.frida_version}。${data.note}`;
+  $('component-link').hidden=!data.available;
+  if(data.available){$('component-link').href=data.url;$('component-link').textContent='打开网盘下载 →';}
+  $('component-status').textContent=data.available?`提取码：${data.extraction_code||'无需提取码'}${data.sha256?' · SHA256：'+data.sha256:''}`:'组件包整理中，网盘链接待站长提供。在线转换用户无需下载或安装。';
+}
 async function initialize() {
   const auth=await api('/api/session');$('login-panel').hidden=auth.authenticated;$('workbench').hidden=true;$('logout').hidden=!auth.required||!auth.authenticated;
   if(!auth.authenticated)return;
-  await loadEnvironment();$('workbench').hidden=false;const previous=sessionStorage.getItem('songdown-job');
+  await loadEnvironment();await loadDownloads();$('workbench').hidden=false;const previous=sessionStorage.getItem('songdown-job');
   if(previous){try{const job=await api(`/api/jobs/${previous}`);if(!renderJob(job))poll();}catch{sessionStorage.removeItem('songdown-job');}}
 }
 $('pick-files').onclick=e=>{e.stopPropagation();$('file-input').click();};$('pick-folder').onclick=e=>{e.stopPropagation();$('folder-input').click();};
@@ -145,5 +147,4 @@ $('delete-job').onclick=async()=>{try{await api(`/api/jobs/${state.job}`,{method
 $('refresh-env').onclick=async()=>{try{await loadEnvironment();notice('环境状态已更新。','success');}catch(e){notice(e.message,'error');}};
 $('login-form').onsubmit=async e=>{e.preventDefault();try{await api('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:$('access-token').value})});$('access-token').value='';notice('');await initialize();}catch(e){notice(e.message,'error');}};
 $('logout').onclick=async()=>{try{if(state.busy){notice('请先等待任务结束或取消，再退出。');return;}await api('/api/session',{method:'DELETE'});sessionStorage.removeItem('songdown-job');location.reload();}catch(e){notice(e.message,'error');}};
-$('update-cookie').onclick=async()=>{try{$('update-cookie').disabled=true;await api('/api/cookie',{method:'POST'});notice('QQ Cookie 已更新。','success');}catch(e){notice(e.message,'error');}finally{$('update-cookie').disabled=false;}};
 initialize().catch(e=>notice(e.message,'error'));

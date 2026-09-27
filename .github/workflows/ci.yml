@@ -20,7 +20,7 @@ jobs:
           node-version: '22'
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: python -m pip install -r requirements-web.txt
-      - run: python -m unittest -v test_ncm tests.test_web
+      - run: python -m unittest -v test_ncm tests.test_web tests.test_downloads
       - run: node --check web/app.js
       - name: Build production image
         run: docker build -t songdown:test .

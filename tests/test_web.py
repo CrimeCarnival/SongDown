@@ -140,19 +140,25 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.submit([('a.ncm', b'abc')], ['ogg']).status_code, 400)
         self.assertEqual(list(Path(self.temp.name).iterdir()), [])
 
-    def test_public_qq_disabled_and_cookie_private(self):
-        tasks = self.client.get('/api/capabilities').get_json()['tasks']
-        self.assertFalse(tasks['mflac']['available'])
-        self.assertFalse(tasks['mgg']['available'])
-        self.assertFalse(tasks['cookie']['available'])
-        self.assertEqual(self.client.post('/api/cookie', headers=HEADERS).status_code, 403)
-        self.assertEqual(self.submit([('song.mgg', b'abc')], ['mgg']).status_code, 400)
+    def test_full_site_cookie_private_and_invalid_qq_isolated(self):
+        response = self.client.get('/api/capabilities').get_json()
+        self.assertNotIn('mode', response)
+        self.assertNotIn('cookie', response['tasks'])
+        self.assertEqual(set(response['tasks']), {'ncm', 'ogg', 'mgg', 'mflac', 'lrc'})
+        self.assertEqual(self.client.post('/api/cookie', headers=HEADERS).status_code, 404)
+        response = self.submit([('song.mgg', b'abc'), ('words.lrc', b'[00:01]hello')], ['mgg', 'lrc'])
+        self.assertEqual(response.status_code, 202)
+        job = self.wait(response.get_json()['id'])
+        self.assertEqual(job['status'], 'partial')
+        self.assertEqual(job['stats']['success'], 1)
+        failed = [f for f in job['file_results'] if f['status'] == 'failed']
+        self.assertEqual(len(failed), 1)
+        self.assertTrue(failed[0]['reason'])
+        self.assertTrue(failed[0]['action'])
+        self.assertNotIn(str(Path(self.temp.name)), str(job))
 
-    def test_local_mode_rejects_remote_and_bad_host(self):
-        self.app.config['LOCAL_QQ'] = True
-        self.assertEqual(self.client.get('/api/health', environ_overrides={'REMOTE_ADDR': '192.0.2.10'}).status_code, 403)
-        self.assertEqual(self.client.get('/api/health', headers={'Host': 'evil.example'}).status_code, 403)
-        self.assertEqual(self.client.get('/api/health').status_code, 200)
+    def test_full_site_remote_health(self):
+        self.assertEqual(self.client.get('/api/health', environ_overrides={'REMOTE_ADDR': '192.0.2.10'}).status_code, 200)
 
     def test_upload_limits_quota_and_job_capacity(self):
         self.assertEqual(self.submit([('f%d.lrc' % i, b'x') for i in range(101)], ['lrc']).status_code, 400)
@@ -241,20 +247,19 @@ class WebTests(unittest.TestCase):
                     self.assertFalse(any('请先启动 QQ音乐' in message for message in messages))
 
     def test_cookie_result_never_exposes_credentials(self):
-        self.app.config['LOCAL_QQ'] = True
-        with patch('web_app.capabilities', return_value={'cookie': {'available': True}}), \
-             patch('update_cookie.update_cookie', return_value={'ok': True, 'cookie': 'private-cookie', 'uin': '123', 'cookie_len': 14}):
+        with patch('update_cookie.update_cookie') as update:
             response = self.client.post('/api/cookie', headers=HEADERS)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(set(response.get_json()), {'ok', 'message'})
-        self.assertNotIn(b'private-cookie', response.data)
+        self.assertEqual(response.status_code, 404)
+        update.assert_not_called()
 
     def test_missing_dependencies_report_unavailable(self):
         with patch('web_app.find_ffmpeg', return_value=None):
             caps = self.client.get('/api/capabilities').get_json()['tasks']
             self.assertFalse(caps['ogg']['available'])
             self.assertTrue(caps['ncm']['available'])
-            self.assertEqual(self.submit([('a.ogg', b'abc')], ['ogg']).status_code, 400)
+            response = self.submit([('a.ogg', b'abc')], ['ogg'])
+            self.assertEqual(response.status_code, 202)
+            self.assertEqual(self.wait(response.get_json()['id'])['status'], 'failed')
 
     def test_public_startup_requires_secrets(self):
         env = {key: value for key, value in os.environ.items() if key not in {'WEB_ACCESS_TOKEN', 'WEB_SECRET_KEY'}}

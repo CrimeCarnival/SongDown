@@ -8,3 +8,6 @@
 !run_web.py
 !web/
 !web/**
+
+!conversion_errors.py
+!site_settings.py

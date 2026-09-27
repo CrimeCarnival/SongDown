@@ -9,17 +9,17 @@ def main():
     parser = argparse.ArgumentParser(description="SongDown 音频转换网页")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--local-qq", action="store_true", help="启用仅本机可访问的 QQ 功能")
+    parser.add_argument("--local-qq", action="store_true", help=argparse.SUPPRESS)  # Legacy launcher compatibility.
     args = parser.parse_args()
     local = args.host in {"127.0.0.1", "localhost"}
-    if args.local_qq and (not local or os.name != "nt"):
-        parser.error("本机 QQ 模式必须在 Windows 上绑定 127.0.0.1 或 localhost")
+    if args.local_qq and not local:
+        parser.error("旧版启动参数只允许环回地址；网站服务请去掉 --local-qq 并配置访问密钥")
     if not local and len(os.environ.get("WEB_ACCESS_TOKEN", "")) < 24:
         parser.error("公网监听必须设置至少 24 字符的 WEB_ACCESS_TOKEN")
     if not local and len(os.environ.get("WEB_SECRET_KEY", "")) < 32:
         parser.error("公网监听必须设置至少 32 字符的 WEB_SECRET_KEY")
     from waitress import serve
-    app = create_app({"LOCAL_QQ": args.local_qq})
+    app = create_app({"SESSION_COOKIE_NAME": f"songdown_{args.port}"})
     print(f"SongDown: http://{args.host}:{args.port}", flush=True)
     try:
         serve(app, host=args.host, port=args.port, threads=6,

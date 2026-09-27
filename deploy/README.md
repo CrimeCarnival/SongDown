@@ -1,5 +1,8 @@
 # 部署指南
 
+**完整 QQ 网站请先阅读 [Windows 服务端教程](LOCAL_QQ.md)。** 当前网站只有一个功能入口，但本页 Linux Docker 方案不能运行 QQ 音乐进程，不可作为完整 QQ 转换环境。以下容器步骤用于 NCM / OGG 等功能的开发、测试与维护。
+
+
 ## 选择服务器
 
 应用和网页资源在同一服务器提供，浏览器无须连接 Google Fonts、jsDelivr、GitHub Raw 等外部资源。GitHub 只用来托管源代码，不作为用户访问网站的必经链路。

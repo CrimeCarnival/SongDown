@@ -1,73 +1,49 @@
-# 本机 QQ 模式使用教程
+# QQ 转换服务端维护（站长使用）
 
-网页内入口：右侧「QQ 音乐格式」下的「本机 QQ 模式教程」，或打开 `/assets/qq-guide.html`。教程随代码部署，无须访问外部网站。
+网站只有一个完整功能入口。访客通过浏览器上传转换，不部署、不安装 QQ，也不提供 Cookie。Python 服务必须与 QQ 音乐运行在同一台 Windows 主机上；不能附加访客电脑上的进程。
 
-## 当前报错是什么意思
+## 组件与版本
 
-```text
-unable to access process with pid ... from the current user account
+组件包包含用户提供的 QQMusic.rar、独立 Python 3.13.15 x64、Frida 16.7.10、网页依赖、qmdec 0.2.0、FFmpeg 和项目源码。保留第三方许可证及文件校验清单，不包含测试歌曲、账号登录数据或密钥缓存。
+
+QQMusic.rar 的 QQMusic.exe 文件版本是 19.51，尚未实际验证解密。先前真实 MFLAC 测试成功使用 22.05（安装目录 2205.23.22.21）。两者不同，19.51 若出现组件不兼容，不要把环境检测当作转换成功。Frida 17 改动了脚本接口，本项目固定 16.7.10。
+
+## 启动
+
+1. 将整个组件包解压到可写目录，保留目录结构。
+2. 用解压软件展开 QQMusic.rar，启动 QQMusic.exe 并登录有相应文件使用权限的账号。不要同时启动多个版本。包内客户端由用户提供，没有执行其中安装/卸载批处理。
+3. 双击 start_server.bat。无需另外安装 Python 或在线下载依赖。打开 http://127.0.0.1:8765。
+4. 用自己的实际文件验证 NCM、OGG、MFLAC、MGG；环境检查只表示依赖/进程被发现。
+5. MGG 若提示密钥不可用，在服务器运行 update_qq_cookie.bat，凭据只保存于该包的 private-profile 下，不传给网页。此操作不会修复 MFLAC 进程附加权限。
+
+组件包中的本地启动仅供站长准备服务，访客上线后直接访问 HTTPS 域名。
+
+## QQ 已启动但无法附加
+
+`unable to access process ... from the current user account` 表示 Python 服务没有权限访问 QQ 进程。
+
+先保存完成的结果，在旧服务终端按 Ctrl+C 停止；确保 QQ 与 Python 属于同一个 Windows 用户、相同权限级别，再运行 start_server.bat。若 QQ 以管理员身份运行，也需右键以管理员身份启动服务。可以将两者均以普通权限重启。
+
+不要仅提升浏览器权限；不要关闭安全软件。受限终端无法附加时改用独立 PowerShell。服务重启后重新上传原文件。如果权限问题解决后出现 hook/导出函数失败，需核对 QQ 客户端版本。
+
+## 部署到公网
+
+需要 Windows 主机、域名与 HTTPS 反向代理，目前用户尚未提供服务器。站长在 Windows 登录会话中保持 QQ 运行；无桌面的系统服务账户可能无法访问该进程。
+
+服务仍监听 127.0.0.1:8765，由同机 Caddy / IIS 转发 HTTPS。设置稳定且保密的 WEB_SECRET_KEY（至少 32 字符）、WEB_ACCESS_TOKEN（至少 24 字符）及 WEB_COOKIE_SECURE=1。可在启动终端设置环境变量后执行 start_server.bat。访问口令由站长发给访客，不是 QQ 密码。
+
+Caddy 配置示例（域名必须替换并完成 DNS）：
+
+```caddyfile
+music.example.com {
+    reverse_proxy 127.0.0.1:8765
+}
 ```
 
-QQ 音乐已经启动，但运行网页服务的 Python 进程无法附加到它。常见原因包括 Windows 用户不同、进程权限级别不同，或服务所在终端受进程访问限制。不是输入目录问题，也不代表 Cookie 过期。
+只对外开放 80/443，不开放 8765。Caddy 需另外安装并在部署时验证。不要公开 QQ 远程桌面、private-profile、日志或整个应用目录。Python 服务只提供规定的网页与任务接口；/api/cookie 已关闭。
 
-## 按此顺序恢复
+中国用户访问无需连接外部前端 CDN。QQ 获取在线密钥仍依赖腾讯服务；正式上线后还需按实际部署区域完成域名要求、HTTPS 和多运营商访问测试。Linux Docker 无法提供原生 MFLAC 解密，应使用 Windows 后端。
 
-1. 先下载其他已完成的任务结果。在启动旧服务的终端按 `Ctrl+C`，确认服务停止；关闭浏览器不会停止服务。
-2. 在项目目录找到 `start_local_qq.bat`，右键选择「以管理员身份运行」，自行确认 Windows 权限提示。使用与 QQ 音乐相同的 Windows 用户。
-3. 保持服务终端打开，浏览器访问 <http://127.0.0.1:8766>，确认页面显示「本机 QQ 模式」，点击「检查环境」。
-4. 服务重启会丢弃旧任务，请重新上传原始文件并转换。
+## 网盘链接
 
-也可以彻底退出 QQ 音乐，再将 QQ 音乐与服务都以普通权限启动。不要只提升浏览器权限；进程访问发生在 Python 服务里。刷新网页和更新 Cookie 都不能修复进程权限不匹配。
-
-如果仍然无法附加，请在独立的 Windows PowerShell 中启动，而不是受限终端；不需要关闭安全软件。若错误变成 hook 加载失败，应检查 QQ 客户端版本兼容性。
-
-## 首次准备
-
-在项目目录执行（Python 3.10+）：
-
-```powershell
-python -m pip install -r requirements-web.txt -r requirements.txt
-```
-
-确认 FFmpeg 已加入 PATH，或保留已有的 `input/Tools/ff.exe`。MGG 还需要 qmdec：
-
-```powershell
-python -m pip install git+https://github.com/Sophomoresty/qmdec.git
-```
-
-此安装命令需要 Git。已有 `input/Tools/qmdec/src` 的工程优先使用其中源码。
-启动 Windows 桌面版 QQ 音乐并登录，保持运行。
-
-## 启动网页
-
-双击 `start_local_qq.bat`；若发生访问权限错误，再按上文以管理员身份启动。该脚本：
-
-- 优先使用项目的 `.venv\Scripts\python.exe`，否则使用 PATH 中的 Python。
-- 仅监听 `127.0.0.1:8766`，临时数据使用独立的 `.web-data-qq` 目录。
-- 不自动提权，不自动结束占用端口的进程。
-
-手动启动时，在项目目录的 PowerShell 中执行：
-
-```powershell
-python run_web.py --local-qq --host 127.0.0.1 --port 8766
-```
-
-若依赖装在虚拟环境，改用：
-
-```powershell
-.\.venv\Scripts\python.exe run_web.py --local-qq --host 127.0.0.1 --port 8766
-```
-
-启动命令成功后，在浏览器打开 <http://127.0.0.1:8766>。不要误开 8765 上的通用服务。如果端口占用，先停止原服务，或更换启动端口并访问对应地址。
-
-## 转换与下载
-
-1. 点击「检查环境」。选项可用表示检测到依赖和进程，不能保证附加权限和文件版本兼容性。
-2. MFLAC：添加文件，勾选「MFLAC → FLAC」，直接转换；此流程不依赖更新 Cookie。
-3. MGG：点击「更新 Cookie」，成功后添加文件并转换；需要有效 Cookie 或密钥缓存，真实文件兼容性仍需逐个验证。
-4. 完成后试听、单独下载或下载 ZIP。新一批转换前，先下载并删除上一批任务。
-5. 用完后在服务终端按 `Ctrl+C` 停止。临时结果会过期，下载后再长期保存。
-
-## 边界说明
-
-本机模式只允许同一台 Windows 电脑访问。公网、Docker、手机浏览器不能直接读取这台电脑上的 QQ 音乐进程。网页按钮不能提升 Windows 进程权限，也不会要求你上传 Cookie。
+上传生成的 SongDown-Windows-Components.zip，再运行 app/scripts/configure_downloads.py，或填写 app/downloads.json。配置在网页刷新时读取。下载区明确显示包内 19.51 与已验证 22.05 的区别。

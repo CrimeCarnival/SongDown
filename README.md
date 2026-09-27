@@ -1,77 +1,52 @@
 # SongDown · 音频转换工作台
 
-将本地音频转换工具做成可自托管的中文网页。前端资源全部随项目提供，不加载外部字体、统计脚本或 CDN。支持电脑与手机浏览器。
+统一的中文在线音频转换网页。前端资源全部随项目提供，不加载外部字体、统计脚本或 CDN。支持电脑与手机浏览器。
 
-## 功能范围
+## 完整功能网站
 
-| 功能 | 通用网页 / Docker | Windows 本机 QQ 模式 |
+访客在同一网页上传、转换、试听和下载，无需部署项目或安装 QQ 音乐。网站不再区分通用版和本机 QQ 版；服务端账号维护不向浏览器开放。
+
+| 格式 | 输出 | 服务端要求 |
 | --- | --- | --- |
-| NCM → 原始 MP3 / FLAC | 支持，无二次压缩 | 支持 |
-| OGG → 高质量 MP3 | 支持，需 FFmpeg | 支持，需 FFmpeg |
-| LRC 歌词复制 | 支持 | 支持 |
-| 多文件 / 文件夹、保留目录 | 支持 | 支持 |
-| 进度、日志、取消、下载 ZIP | 支持 | 支持 |
-| 音频试听、单文件下载 | 支持，取决于浏览器编解码能力 | 支持 |
-| MGG → MP3 | 禁用 | 需 qmdec 和有效 Cookie 或密钥缓存 |
-| MFLAC → FLAC | 禁用 | 需 FFmpeg、Frida、兼容版本的 QQ 音乐客户端 |
-| 从 QQ 音乐更新 Cookie | 禁用 | 仅允许本机访问 |
+| NCM | 原始 MP3 / FLAC | PyCryptodome |
+| OGG | 高质量 MP3 | FFmpeg |
+| MGG | MP3 | qmdec、FFmpeg、有效 Cookie 或密钥 |
+| MFLAC | FLAC | Windows QQ 音乐、Frida 16.7.10、FFmpeg |
+| LRC | 原歌词文件 | 无额外依赖 |
 
-MFLAC 输出会进行无损 FLAC 整理，并对原始音频 MD5 和样本数校验，以剔除 QQ 解密后残留的非音频尾部；校验失败不生成结果。
+支持批量与文件夹上传、进度、取消、试听、单文件与 ZIP 下载。每个失败文件显示原因、建议和错误码；同批成功结果保留。服务端缺少组件时会明确报告，开放格式入口不代表服务器已准备好。
 
-NCM 保留原始音频数据，尚不将容器中独立的封面、标题等元数据写入音频。NCM 解析格式参考 [ncmdump](https://github.com/taurusxin/ncmdump)。QQ 功能沿用原项目能力，其可用性取决于客户端与文件版本；环境检测通过不等于每个加密文件都能解密。
+MFLAC 输出无损整理后核对原始 PCM MD5 与样本数，校验失败不提供结果。NCM 直接提取音频，暂不写入独立封面和标签。NCM 格式参考 [ncmdump](https://github.com/taurusxin/ncmdump)。
 
-## 快速启动
+## 站长启动与部署
 
-需要 Python 3.10+（CI 使用 3.12）和安装在 PATH 中的 FFmpeg。
+普通用户只需访问站长提供的网站地址。以下操作仅由站长执行。
 
-```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# Linux / macOS: source .venv/bin/activate
-python -m pip install -r requirements-web.txt
+完整 QQ 功能需要一台可运行兼容 QQ 音乐的 Windows 主机。当前尚无服务器或域名，未上线公网。GitHub Pages 不能运行本项目的 Python 后端。
+
+离线组件包提供 Python 运行环境和依赖，解压后启动 `start_server.bat`，服务默认监听 `127.0.0.1:8765`。QQ 客户端由站长解压、启动并登录；访客不需要执行这些步骤。
+
+包内用户提供的 QQMusic.rar 实际版本为 **19.51（兼容性未实测）**；已通过真实 MFLAC 转换的客户端为 **22.05 / 2205.23.22.21**。不能将这两个版本视为同一版本。
+
+源码开发启动：
+
+```powershell
+python -m pip install -r requirements-web.txt -r requirements.txt
+python -m pip install git+https://github.com/Sophomoresty/qmdec.git
 python run_web.py
 ```
 
-浏览器打开 <http://127.0.0.1:8765>。Windows 也可双击 `start_web.bat`。
-已有项目中的 `input/Tools/ff.exe` 可在 Windows 自动识别；仓库不包含 FFmpeg 二进制文件。
+FFmpeg 需在 PATH，或 Windows 下置于 `input/Tools/ff.exe`。详细权限、登录维护及 Windows HTTPS 部署见 [服务端 QQ 教程](deploy/LOCAL_QQ.md)。Docker 配置仍可用于开发与 NCM / OGG 后端，但 Linux 容器不能运行原生 QQ 进程，不是完整 QQ 网站的部署方案。
 
-单独运行 NCM 批处理：
+## 网盘下载区
 
-```bash
-python convert_ncm.py -i input -o output
+复制 `downloads.example.json` 为 `downloads.json`，填写 HTTPS 网盘链接、提取码和组件 ZIP 的 SHA256。也可用 `SONGDOWN_DOWNLOAD_CONFIG` 指向配置文件。字段仅用于公开展示，不要写账号凭据。
+
+```powershell
+python scripts/configure_downloads.py --url "https://你的网盘分享链接" --code "提取码" --archive "组件包.zip"
 ```
 
-## 公网部署（已提供配置，尚需服务器）
-
-推荐自有域名 + 服务器 + Docker Compose + Caddy HTTPS。该项目有 Python 转换后端，不能直接运行在 GitHub Pages 上。
-
-```bash
-git clone https://github.com/CrimeCarnival/SongDown.git
-cd SongDown
-python scripts/init_deploy.py --domain music.example.com
-# 将域名解析到服务器，开放 TCP 80/443，再执行：
-docker compose up -d --build
-```
-
-脚本会生成 `.env`，并拒绝覆盖已有文件。使用其中 `WEB_ACCESS_TOKEN` 的值登录网页；请不要将 `.env` 上传到 GitHub。
-完整说明见 [部署指南](deploy/README.md)，包括大陆 / 香港部署、离线传输镜像、回滚、持久卷和上线验收。
-
-## Windows 本机 QQ 模式
-
-详细步骤与权限错误排查见 [本机 QQ 模式教程](deploy/LOCAL_QQ.md)。网页右侧也提供同名入口。
-
-推荐双击 `start_local_qq.bat`，然后访问 <http://127.0.0.1:8766>。若提示 `unable to access process`，先停止旧服务，再右键此脚本选择「以管理员身份运行」；仅刷新网页或更新 Cookie 不会修复进程权限。
-
-```bash
-python -m pip install -r requirements-web.txt -r requirements.txt
-python -m pip install git+https://github.com/Sophomoresty/qmdec.git
-# 先启动 QQ 音乐并登录，再运行：
-python run_web.py --local-qq --port 8766
-```
-
-本机模式强制绑定环回地址，同时检查连接来源与 Host；禁止通过该模式向公网分享 QQ 凭据。
-已有工程中的 `input/Tools/qmdec/src` 优先使用；若不存在则使用已安装的 qmdec。外部项目的源码与音乐文件不被打包到本仓库。
-桌面界面仍可使用 `python GUI/app.py` 启动。
+配置实时读取，刷新网页即可生效。链接未提供时显示待配置状态，不生成虚假下载链接。下载组件是站长维护操作，不是访客转换的前置步骤。
 
 ## 临时文件与限制
 
