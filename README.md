@@ -58,11 +58,15 @@ docker compose up -d --build
 
 ## Windows 本机 QQ 模式
 
+详细步骤与权限错误排查见 [本机 QQ 模式教程](deploy/LOCAL_QQ.md)。网页右侧也提供同名入口。
+
+推荐双击 `start_local_qq.bat`，然后访问 <http://127.0.0.1:8766>。若提示 `unable to access process`，先停止旧服务，再右键此脚本选择「以管理员身份运行」；仅刷新网页或更新 Cookie 不会修复进程权限。
+
 ```bash
 python -m pip install -r requirements-web.txt -r requirements.txt
 python -m pip install git+https://github.com/Sophomoresty/qmdec.git
 # 先启动 QQ 音乐并登录，再运行：
-python run_web.py --local-qq
+python run_web.py --local-qq --port 8766
 ```
 
 本机模式强制绑定环回地址，同时检查连接来源与 Host；禁止通过该模式向公网分享 QQ 凭据。

@@ -9,10 +9,11 @@ import time
 import unittest
 import zipfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, Mock
+from types import SimpleNamespace
 
 from werkzeug.datastructures import MultiDict
-from audio_converter_core import find_ffmpeg, _normalize_flac, _flac_streaminfo
+from audio_converter_core import find_ffmpeg, _normalize_flac, _flac_streaminfo, convert_mflac_files, ConversionStats
 from test_ncm import fixture
 from web_app import create_app, safe_relative
 
@@ -214,6 +215,30 @@ class WebTests(unittest.TestCase):
             _normalize_flac(source, target)
         self.assertFalse(target.exists())
         self.assertFalse(list(Path(self.temp.name).glob('.flac-*')))
+
+    def test_qq_attach_errors_distinguish_permissions_and_missing_process(self):
+        class MissingProcess(Exception):
+            pass
+        source = Path(self.temp.name) / 'song.mflac'
+        source.write_bytes(b'test')
+        cases = [
+            (RuntimeError('unable to access process with pid 20496 from the current user account'), '进程访问权限不足'),
+            (MissingProcess('unable to find process'), '未找到 QQMusic.exe'),
+            (RuntimeError('unexpected connection failure'), '客户端兼容性'),
+        ]
+        for error, expected in cases:
+            with self.subTest(error=str(error)):
+                fake = SimpleNamespace(attach=Mock(side_effect=error), ProcessNotFoundError=MissingProcess)
+                messages, updates = [], []
+                stats = ConversionStats(total=1)
+                with patch.dict(sys.modules, {'frida': fake}):
+                    convert_mflac_files(Path(self.temp.name), Path(self.temp.name) / 'out', stats, messages.append, updates.append)
+                self.assertEqual(stats.failed, 1)
+                self.assertEqual(updates[-1].failed, 1)
+                self.assertIn(expected, '\n'.join(messages))
+                if 'unable to access process' in str(error):
+                    self.assertTrue(any('start_local_qq.bat' in message for message in messages))
+                    self.assertFalse(any('请先启动 QQ音乐' in message for message in messages))
 
     def test_cookie_result_never_exposes_credentials(self):
         self.app.config['LOCAL_QQ'] = True

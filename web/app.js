@@ -83,6 +83,10 @@ function renderJob(job) {
   $('progress-text').textContent=done?`${statusNames[job.status]} · 已处理 ${processed} / ${stats.total} 个文件`:`${statusNames[job.status]} · ${processed} / ${stats.total}`;
   $('stats-text').textContent=`成功 ${stats.success} · 跳过 ${stats.skipped} · 失败 ${stats.failed}`;
   $('log-text').textContent=job.logs.join('\n');
+  if(job.logs.some(line=>/进程访问权限不足|unable to access process/i.test(line))){
+    notice('QQ 音乐已启动，但服务无权访问进程。请停止旧服务，以管理员身份运行 start_local_qq.bat，再重新上传。操作步骤见右侧“本机 QQ 模式教程”。','error');
+    document.querySelector('.logs').open=true;
+  }
   $('delete-job').disabled=!done;
   const signature=JSON.stringify(job.outputs);
   if(done&&signature!==state.rendered){

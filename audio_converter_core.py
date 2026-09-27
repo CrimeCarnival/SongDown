@@ -346,7 +346,18 @@ def convert_mflac_files(
     try:
         session = frida.attach("QQMusic.exe")
     except Exception as exc:
-        _log(log, f"[错误] 无法附加 QQMusic.exe，请先启动 QQ音乐: {exc}")
+        error_text = str(exc)
+        if isinstance(exc, PermissionError) or any(marker in error_text.lower() for marker in (
+                "unable to access process", "access denied", "permission denied", "not permitted")):
+            _log(log, "[错误] QQ 音乐进程访问权限不足，当前网页服务无法附加 QQMusic.exe。")
+            _log(log, "[解决方法] 在启动服务的终端按 Ctrl+C 停止旧服务；在项目目录右键 start_local_qq.bat，选择“以管理员身份运行”，确认 Windows 提示后重新上传转换。")
+            _log(log, "请使用与 QQ 音乐相同的 Windows 用户；也可将 QQ 音乐和服务均以普通权限重新启动。受限终端中请改用独立 Windows PowerShell。")
+            _log(log, "只刷新网页或更新 Cookie 无法解决进程权限问题；查看网页中的“本机 QQ 模式教程”。")
+        elif isinstance(exc, frida.ProcessNotFoundError):
+            _log(log, "[错误] 未找到 QQMusic.exe，请启动 Windows 桌面版 QQ 音乐，登录后再转换。")
+        else:
+            _log(log, "[错误] 无法附加 QQMusic.exe，请检查 Windows 用户、运行权限及 QQ 客户端兼容性。")
+        _log(log, f"[详细原因] {exc}")
         stats.failed += len(_files_with_suffix(input_dir, ".mflac"))
         _emit(progress, stats)
         return
